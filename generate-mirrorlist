@@ -1,0 +1,226 @@
+#!/usr/bin/env bash
+# Measure Arch mirrors and preview a Copenhagen-oriented mirrorlist.
+
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+function error() {
+  printf 'generate-mirrorlist: %s\n' "$*" >&2
+}
+
+function usage() {
+  cat <<'EOF'
+Usage: generate-mirrorlist [OPTIONS]
+
+Benchmark healthy European HTTPS mirrors, then preview a ranked mirrorlist.
+No system files change unless --apply is supplied. Each run can transfer
+several GiB and take several minutes; keep other network traffic low.
+
+  --output-dir DIR       Save raw data, ranking and mirrorlist in DIR.
+  --countries CODES      Comma-separated ISO codes (default: broad Europe).
+  --age HOURS            Maximum last-sync age (default: 12).
+  --number N             Mirrors to retain (default: 10; minimum: 3).
+  --finalists N          Screening finalists (default: 15; >= number).
+  --rounds N             Separate shuffled rounds (default: 3; minimum: 3).
+  --family auto|4|6      Actual connection family (default: auto).
+  --seed N               Reproducible shuffle seed.
+  --status-file FILE     Use a saved Arch Mirror Status JSON snapshot.
+  --baseline FILE        Current mirrorlist (default: /etc/pacman.d/mirrorlist).
+  --connect-timeout N    Connection timeout in seconds (default: 3).
+  --max-time N           Total time per transfer in seconds (default: 8).
+  --from FILE            Preview/apply an existing list; skip benchmarking.
+  --apply                Back up and atomically replace the target mirrorlist.
+  --target FILE          Apply destination (default: /etc/pacman.d/mirrorlist).
+  --plan                Print the benchmark command without running it.
+  -h, --help             Show help.
+
+Examples:
+  ./generate-mirrorlist --output-dir ./results/evening
+  ./generate-mirrorlist --family 4 --output-dir ./results/ipv4
+  ./generate-mirrorlist --from ./results/evening/mirrorlist --apply
+
+Requirements: Arch Linux, Bash, Python 3 and curl. Applying also uses flock
+and GNU coreutils; sudo is requested only if the target needs root access.
+EOF
+}
+
+function require_value() {
+  if [[ $# -lt 2 || -z $2 ]]; then
+    error "$1 requires a value."
+    exit 2
+  fi
+}
+
+function validate_list() {
+  local source=$1
+  if [[ ! -f $source ]] || ! awk '
+    /^[[:space:]]*($|#)/ { next }
+    /^Server = https:\/\/[^/[:space:]]+\/([^[:space:]]*\/)?\$repo\/os\/\$arch$/ {
+      if (seen[$0]++) exit 1
+      count++
+      next
+    }
+    { invalid = 1; exit 1 }
+    END { if (invalid || count < 3) exit 1 }
+  ' "$source"; then
+    error "Invalid mirrorlist: expected >= 3 unique HTTPS Server entries."
+    return 1
+  fi
+}
+
+function apply_list() {
+  (
+    local source=$1 target=$2 script_path=$3
+    local directory staged='' backup lock_fd lock_path
+    directory=$(dirname -- "$target")
+    if [[ ! -d $directory || -L $target || (-e $target && ! -f $target) ]]; then
+      error 'Target directory must exist; target must be a regular file.'
+      return 1
+    fi
+
+    if [[ ! -w $directory || (-e $target && ! -w $target) ]]; then
+      if ((EUID == 0)); then
+        error "Target is not writable: $target"
+        return 1
+      fi
+      command -v sudo >/dev/null || {
+        error 'sudo is required to apply this target.'
+        return 1
+      }
+      sudo -- "$script_path" --from "$source" --target "$target" --apply
+      return
+    fi
+
+    command -v flock >/dev/null || {
+      error 'flock is required to apply a mirrorlist.'
+      return 1
+    }
+    lock_path="${target}.lock"
+    if [[ -L $lock_path || (-e $lock_path && ! -f $lock_path) ]]; then
+      error 'Lock path must be a regular file, not a symlink.'
+      return 1
+    fi
+    exec {lock_fd}>>"$lock_path"
+    flock -x "$lock_fd"
+    # Recheck under the lock before touching the target.
+    [[ ! -L $target && (! -e $target || -f $target) ]] || {
+      error 'Target became a symlink or nonregular file.'
+      return 1
+    }
+    staged=$(mktemp -- "${target}.new.XXXXXX")
+    trap '[[ -z ${staged:-} ]] || rm -f -- "$staged"' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    install -m 0644 -- "$source" "$staged"
+    validate_list "$staged"
+    if [[ -e $target ]]; then
+      backup=$(mktemp -- "${target}.bak.$(date -u +%Y%m%dT%H%M%SZ).XXXXXX")
+      cp -p -- "$target" "$backup"
+      printf 'Backup: %s\n' "$backup"
+    fi
+    mv -Tf -- "$staged" "$target"
+    staged=''
+    printf 'Installed: %s\n' "$target"
+  )
+}
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+function main() {
+  local script_path script_dir helper output_dir='' source=''
+  local target=/etc/pacman.d/mirrorlist apply=0 plan=0
+  local -a options=() command_args=()
+  script_path=$(readlink -f -- "${BASH_SOURCE[0]}")
+  script_dir=$(dirname -- "$script_path")
+  helper="$script_dir/rank_mirrors.py"
+
+  while (($#)); do
+    case $1 in
+      -h | --help)
+        usage
+        return
+        ;;
+      --apply)
+        apply=1
+        shift
+        ;;
+      --plan)
+        plan=1
+        shift
+        ;;
+      --from)
+        require_value "$@"
+        source=$(readlink -f -- "$2")
+        shift 2
+        ;;
+      --target)
+        require_value "$@"
+        target=$(realpath -m -s -- "$2")
+        shift 2
+        ;;
+      --output-dir)
+        require_value "$@"
+        output_dir=$2
+        shift 2
+        ;;
+      --countries | --age | --number | --finalists | --rounds | --family | \
+        --seed | --status-file | --baseline | --connect-timeout | --max-time)
+        require_value "$@"
+        options+=("$1" "$2")
+        shift 2
+        ;;
+      *)
+        error "Unknown option: $1 (see --help)."
+        return 2
+        ;;
+    esac
+  done
+
+  if [[ -n $source ]]; then
+    if [[ -n $output_dir || ${#options[@]} -gt 0 || $plan -eq 1 ]]; then
+      error '--from cannot be combined with benchmark options or --plan.'
+      return 2
+    fi
+    validate_list "$source"
+  else
+    if [[ ! -r $helper ]]; then
+      error "Benchmark helper not found: $helper"
+      return 1
+    fi
+    if [[ ! -r /etc/arch-release ]]; then
+      error 'This script requires an Arch Linux host.'
+      return 1
+    fi
+    if [[ -z $output_dir ]]; then
+      output_dir="${XDG_CACHE_HOME:-$HOME/.cache}/generate-mirrorlist"
+      output_dir+="/$(date -u +%Y%m%dT%H%M%SZ)-$$"
+    fi
+    command_args=(/usr/bin/python "$helper" --output-dir "$output_dir")
+    command_args+=("${options[@]}")
+    if ((plan)); then
+      printf '%q ' "${command_args[@]}"
+      printf '\n'
+      return
+    fi
+    "${command_args[@]}"
+    source=$(readlink -f -- "$output_dir/mirrorlist")
+    validate_list "$source"
+  fi
+
+  if ((apply)); then
+    apply_list "$source" "$target" "$script_path"
+  else
+    printf '\nPreview: %s\n' "$source"
+    cat -- "$source"
+    printf '\nApply after reviewing:\n  %q --from %q --target %q --apply\n' \
+      "$script_path" "$source" "$target"
+  fi
+}
+
+main "$@"
