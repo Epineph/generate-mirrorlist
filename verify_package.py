@@ -196,7 +196,7 @@ def run(args):
   }
   engine.write_json(args.output_dir / "summary.json", summary)
   lines = [
-    "# Independent large-package validation", "",
+    "# Separate large-package validation", "",
     f"Package: `{filename}` ({size / engine.MIN_BYTES:.2f} MiB)",
     f"Started: {started}; finished: {summary['finished']}",
     f"Family: {args.family}; rounds: {args.rounds}; seed: {args.seed}",
@@ -246,7 +246,9 @@ def main():
     print(f"verify-package: {error}", file=sys.stderr)
     return 1
   except KeyboardInterrupt:
-    print("verify-package: interrupted; partial raw.csv retained", file=sys.stderr)
+    print(
+      "verify-package: interrupted; partial raw.csv retained", file=sys.stderr,
+    )
     return 130
 
 

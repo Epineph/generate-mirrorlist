@@ -1,0 +1,54 @@
+{
+  "source_run": "results/2026-10-23-auto-verified",
+  "started": "2026-10-23T16:26:28.787856+00:00",
+  "finished": "2026-10-23T16:26:39.674125+00:00",
+  "family": "auto",
+  "package_api": "https://archlinux.org/packages/extra/x86_64/firefox/json/",
+  "filename": "firefox-158.0.1-1-x86_64.pkg.tar.zst",
+  "package_bytes": 90351212,
+  "rounds": 3,
+  "seed": 20261024,
+  "selected_urls": [
+    "https://mirror.osbeck.com/archlinux/",
+    "https://mirrors.dotsrc.org/archlinux/",
+    "https://ftp.lysator.liu.se/pub/archlinux/"
+  ],
+  "baseline_urls": [
+    "https://mirror.osbeck.com/archlinux/",
+    "https://ftp.lysator.liu.se/pub/archlinux/",
+    "https://arch.alhp.dev/",
+    "https://dornogal.falcao.org/archlinux/",
+    "https://mirror.ams1.nl.leaseweb.net/archlinux/"
+  ],
+  "status": "complete",
+  "ranking": [
+    {
+      "url": "https://mirrors.dotsrc.org/archlinux/",
+      "median_mib_per_second": 90.96417236096163,
+      "min_mib_per_second": 79.95838124606306,
+      "max_mib_per_second": 91.146706715893,
+      "median_seconds": 0.947248,
+      "successful_rounds": 3
+    },
+    {
+      "url": "https://mirror.osbeck.com/archlinux/",
+      "median_mib_per_second": 74.93940736036417,
+      "min_mib_per_second": 67.54332715421478,
+      "max_mib_per_second": 89.5123168426907,
+      "median_seconds": 1.149804,
+      "successful_rounds": 3
+    },
+    {
+      "url": "https://ftp.lysator.liu.se/pub/archlinux/",
+      "median_mib_per_second": 67.21240441858062,
+      "min_mib_per_second": 64.78570111546242,
+      "max_mib_per_second": 69.68093324020735,
+      "median_seconds": 1.28199,
+      "successful_rounds": 3
+    }
+  ],
+  "downloaded_gib": 0.7573151104152203,
+  "successful_sha256": [
+    "b53afe3f40eee8144fb17e96c00a87d42456eabb9be87d407f34d6ba8806adaf"
+  ]
+}

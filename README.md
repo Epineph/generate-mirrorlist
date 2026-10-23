@@ -9,6 +9,20 @@ is a separate objective: concurrent speed tests finish sooner but can interfere
 with each other. This implementation measures mirrors one at a time and keeps
 the raw evidence.
 
+## Measured recommendation
+
+The [23 October benchmark](docs/benchmark-2026-10-23.md) screened 154 mirrors,
+retested 18 finalists, then compared the strongest three using full 86.17 MiB
+Firefox downloads. The recommended general order is **osbeck, dotsrc, Lysator**.
+Your current first mirror was already osbeck; no general speedup over it has
+been established.
+
+In nine package confirmation rounds, dotsrc had a 14.6% higher median throughput
+but a 5.1% longer mean completion time and greater variability. Osbeck also won
+the database test. Choosing dotsrc first is reasonable if median throughput of
+large packages is the specific objective. The report includes mean, sample SD,
+median, ranges, effect sizes and raw evidence; it makes no significance claim.
+
 ## Use
 
 Requirements on Arch Linux: Bash, Python 3, curl, GNU coreutils and util-linux
@@ -100,9 +114,24 @@ versions can differ; bytes/time normalizes size approximately, and recorded
 hashes expose version changes. This is a database download benchmark, not a
 proof of sustained throughput for large package downloads.
 
-For a stronger deployment decision, repeat at different times, compare a common
-large package on the strongest mirrors, and then compare a fixed uncached set
-of packages with pacman's actual parallelism. The current host already has
+For a stronger deployment decision, repeat at different times and compare a
+common large package on the strongest mirrors:
+
+```bash
+/usr/bin/python verify_package.py --run-dir ./results/evening \
+  --output-dir ./results/evening-package
+```
+
+This optional check retrieves current Firefox package metadata from Arch and
+downloads that exact package three times from each of the leading three mirrors
+and the first baseline mirror. It keeps a separate report and raw CSV. Full
+file size and a common SHA256 are required before comparing rates. This checks
+content consistency; it does not verify the package signature. Temporary package
+files are removed; nothing is installed. The package check does not rewrite the
+database-ranked mirrorlist. Inspect both reports when choosing the first mirror.
+
+A fixed uncached set of packages with pacman's actual parallelism would provide
+a stronger application-level comparison. The current host already has
 `ParallelDownloads = 5`; that setting was inspected and left as configured.
 Neither application-level tests nor any package installation is implied by
 the database measurements.
@@ -138,7 +167,7 @@ for this connection; they are configurable operational defaults.
 ```bash
 shellcheck generate-mirrorlist tests/test_apply.sh
 shfmt -d -i 2 -ci generate-mirrorlist tests/test_apply.sh
-ruff check rank_mirrors.py tests/test_rank_mirrors.py
+ruff check rank_mirrors.py verify_package.py tests docs/analyze_results.py
 /usr/bin/python -m unittest discover -s tests -v
 bash tests/test_apply.sh
 ```

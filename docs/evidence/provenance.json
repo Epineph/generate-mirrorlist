@@ -1,0 +1,8 @@
+{
+  "source_sha256": {
+    "generate-mirrorlist": "7a597fb7f55e1a8fc9588e2cee05f2cdcc25fbf118d918d5523cf8e44e6ef4cd",
+    "rank_mirrors.py": "321cbf6c1c35bbeadc272603462a2c0f8d373a89d7dd454fb7c6ae7ad04f15c8",
+    "verify_package.py": "df0daeda8568dd53426165269e21a7ab35472b02129838edc865684722f98ab3",
+    "docs/analyze_results.py": "2c5c2c808ba2aefb7b93a40b913ed720c5d8c70b8c375d19ea4e5d472ea9a599"
+  }
+}
