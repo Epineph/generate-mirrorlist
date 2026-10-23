@@ -1,0 +1,125 @@
+---
+title: "Arch mirror benchmark: Copenhagen"
+date: "23 October 2026"
+lang: en-GB
+params:
+  evidence_dir: "evidence"
+output:
+  md_document:
+    variant: gfm
+    preserve_yaml: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+evidence = params$evidence_dir
+database = jsonlite::read_json(
+  file.path(evidence, "database", "summary.json"), simplifyVector = TRUE
+)
+package = jsonlite::read_json(
+  file.path(evidence, "package-confirm", "summary.json"), simplifyVector = TRUE
+)
+raw = read.csv(file.path(evidence, "package-confirm", "raw.csv"))
+urls = c(
+  Osbeck = "https://mirror.osbeck.com/archlinux/",
+  dotsrc = "https://mirrors.dotsrc.org/archlinux/",
+  Lysator = "https://ftp.lysator.liu.se/pub/archlinux/"
+)
+
+# Fail rather than silently dropping an unsuccessful or incomplete transfer.
+stopifnot(
+  all(tolower(as.character(raw$success)) == "true"),
+  all(raw$phase == "package"),
+  all(raw$size_download == package$package_bytes),
+  length(unique(raw$sha256)) == 1L,
+  unique(raw$sha256) == package$successful_sha256,
+  all(is.finite(raw$time_total) & raw$time_total > 0)
+)
+raw$rate = raw$size_download / raw$time_total / 2^20
+measurements = lapply(urls, function(url) {
+  trials = raw[raw$url == url, ]
+  stopifnot(
+    nrow(trials) == package$rounds,
+    identical(sort(trials$round), seq_len(package$rounds))
+  )
+  trials[order(trials$round), ]
+})
+stopifnot(nrow(raw) == length(urls) * package$rounds)
+describe = function(trials) {
+  c(
+    median_rate = median(trials$rate),
+    mean_rate = mean(trials$rate),
+    sd_rate = sd(trials$rate),
+    median_time = median(trials$time_total),
+    mean_time = mean(trials$time_total)
+  )
+}
+statistics = t(vapply(measurements, describe, numeric(5)))
+osbeck = statistics["Osbeck", ]
+dotsrc = statistics["dotsrc", ]
+rate_advantage = 100 * (dotsrc["median_rate"] / osbeck["median_rate"] - 1)
+mean_time_change = 100 * (dotsrc["mean_time"] / osbeck["mean_time"] - 1)
+median_time_saved = osbeck["median_time"] - dotsrc["median_time"]
+wins = sum(measurements$dotsrc$rate > measurements$Osbeck$rate)
+db_rates = vapply(urls, function(url) {
+  database$ranking$median_mib_per_second[database$ranking$url == url]
+}, numeric(1))
+format_number = function(value, digits = 2) {
+  formatC(value, digits = digits, format = "f")
+}
+```
+
+## Recommendation
+
+**Osbeck first, dotsrc second, Lysator third** is the preferred general-purpose
+order. Osbeck led database downloads and had lower observed mean package
+completion time and variability. Your original list already started with Osbeck.
+For median throughput of large packages, dotsrc is the nominal leader.
+
+## Measurements and results
+
+Of **`r database$screened` European HTTPS mirrors** screened,
+`r database$screen_successes` passed; all `r database$finalists` finalists
+passed three shuffled repeat rounds. Downloads were serial; elapsed time
+included connection setup. The table uses **`r package$rounds` fresh rounds
+per mirror** of one `r format_number(package$package_bytes / 2^20)` MiB Firefox
+package. All `r nrow(raw)` payloads had the same SHA256.
+
+```{r results, results='asis'}
+display = data.frame(
+  Mirror = names(urls),
+  `Median MiB/s` = format_number(statistics[, "median_rate"]),
+  `Mean ± SD MiB/s` = paste(
+    format_number(statistics[, "mean_rate"]), "±",
+    format_number(statistics[, "sd_rate"])
+  ),
+  `Mean time (s)` = format_number(statistics[, "mean_time"], 3),
+  check.names = FALSE
+)
+knitr::kable(display, format = "pipe", row.names = FALSE,
+             align = c("l", "r", "r", "r"))
+```
+
+MiB/s uses binary megabytes. SD is the sample standard deviation across
+within-session transfers. Database median rates were **Osbeck
+`r format_number(db_rates["Osbeck"])`, dotsrc
+`r format_number(db_rates["dotsrc"])`, Lysator
+`r format_number(db_rates["Lysator"])` MiB/s** (three rounds each).
+
+Dotsrc's median package throughput was **`r format_number(rate_advantage, 1)`%
+higher** than Osbeck's, saving `r format_number(median_time_saved, 3)` seconds
+at the median. It won `r wins` of `r package$rounds` round comparisons. However,
+its slower transfers made its **mean completion time
+`r format_number(mean_time_change, 1)`% longer**, which supports retaining
+Osbeck first when balancing speed and consistency.
+
+## Interpretation
+
+These descriptive results cover one host, path and day. Repeated transfers
+are not independent days; no significance or confidence claims are made.
+Only the database top three received the package check. Other times of day
+and pacman's parallel downloads were not tested. No lasting winner or
+whole-upgrade speedup is established; no system mirrorlist was changed.
+
+Evidence: [detailed benchmark](benchmark-2026-10-23.md) and
+[saved measurements](evidence/package-confirm/raw.csv).

@@ -57,6 +57,17 @@ Do not edit a running Bash script; benchmark evidence was complete and stable
 preview was checked separately. The invalid/interrupted run remains ignored in
 `results/`; it was not used in the analysis.
 
+## Brief report generation
+
+`docs/mirrorlist-summary.Rmd` calculates the short report directly from the
+saved evidence. `Rscript scripts/render-report.R` renders GFM Markdown and a
+one-page PDF via Pandoc/XeLaTeX (A4, 12 pt, 1.5 cm margins). Use
+`--markdown-only` to skip the PDF. R packages rmarkdown, knitr and jsonlite,
+Pandoc, XeLaTeX and Noto Serif were confirmed available on the live host.
+Rendering succeeded; the PDF text, page size/count and visual layout were
+checked. No new benchmarks were run. The source fails on incomplete package
+rounds, failed transfers, inconsistent sizes or differing payload digests.
+
 Future work, if requested: repeat across days/address families and compare a
 fixed uncached package workload with actual pacman concurrency. No additional
 measurement or system changes are necessary for the current reviewable result.

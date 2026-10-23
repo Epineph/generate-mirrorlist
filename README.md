@@ -23,6 +23,24 @@ the database test. Choosing dotsrc first is reasonable if median throughput of
 large packages is the specific objective. The report includes mean, sample SD,
 median, ranges, effect sizes and raw evidence; it makes no significance claim.
 
+## Brief report
+
+The results are also available as a concise
+[Markdown summary](docs/mirrorlist-summary.md) and a
+[one-page PDF](docs/mirrorlist-summary.pdf). Both are generated from the saved
+CSV measurements using [R Markdown](docs/mirrorlist-summary.Rmd).
+
+```bash
+Rscript scripts/render-report.R
+# Or regenerate only the Markdown version:
+Rscript scripts/render-report.R --markdown-only
+```
+
+Rendering requires R packages `rmarkdown`, `knitr` and `jsonlite`, plus Pandoc.
+The PDF additionally uses XeLaTeX and Noto Serif. Its settings are A4, 12-point
+text, 1.5 cm margins and Tango syntax highlighting. The render command reads
+saved data only; it performs no network requests or system changes.
+
 ## Use
 
 Requirements on Arch Linux: Bash, Python 3, curl, GNU coreutils and util-linux
